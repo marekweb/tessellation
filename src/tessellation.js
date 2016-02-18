@@ -3,8 +3,12 @@
 (function () {
   class Tessellation {
     constructor({canvas, tpr = 50}) {
-      if (canvas === null) {
-        throw new Error('Missing option: canvas');
+      if (typeof canvas === 'string') {
+        canvas = document.getElementById();
+      }
+
+      if (!canvas) {
+        throw new Error('Missing or invalid option: canvas');
       }
 
       this.canvas = canvas;
@@ -17,38 +21,46 @@
       this.triangleSide = width / this.trianglesPerRow;
       this.columnWidth = Math.sqrt(3) * this.triangleSide / 2;
 
-      // this.xOffset = (this.columnWidth - (width % this.columnWidth)) / 2;
-      // this.yOffset = (this.triangleSide - (height % this.triangleSide)) /2;
-      this.xOffset = 0;
-      this.yOffset = 0;
+      this.xOffset = width / 2;
+      this.yOffset = height / 2;
 
-      this.rows = Math.ceil(height / this.triangleSide * 2) + 1;
-      this.columns = Math.ceil(width / this.columnWidth);
+      this.gridOffsetY = Math.ceil(height / this.triangleSide) + 2;
+      this.rows = this.gridOffsetY * 4;
 
-      this.grid = new Array(this.columns * this.rows);
-      this.dirty = new Array(Math.ceil(this.columns * this.rows / 32));
-      this.color = new Array(this.columns * this.rows);
+      this.gridOffsetX = Math.ceil(width / this.columnWidth / 2);
+      this.columns = this.gridOffsetX * 2;
 
-      for (var c = 0; c < this.columns; c++) {
-        for (var r = 0; r < this.rows; r++) {
-          var p = this.coordinatedToPoints(c, r);
-          this.grid[r * this.columns + c] = p;
+      this.grid = this.constructGrid(this.rows, this.columns);
+    }
+
+    constructGrid(w, h) {
+      var grid = [];
+      for (var x = 0; x < h; x++) {
+        var row = [];
+        for (var y = 0; y < w; y++) {
+          row.push({
+            color: 'rgba(0, 0, 0, 0)',
+            dirty: false,
+            points: this.coordinatedToPoints(x, y)
+          });
         }
+        grid.push(row);
       }
+      return grid;
     }
 
     render() {
-      var j = Math.floor(Math.random() * this.grid.length);
-      this.dirty[j] = true;
+      for (var x = 0; x < this.columns; x++) {
+        for (var y = 0; y < this.rows; y++) {
+          var t = this.grid[x][y];
 
-      for (var i = 0; i < this.grid.length; i++) {
-        if (this.dirty[i]) {
-          this.drawTriangle(this.grid[i]);
-          this.dirty[i] = false;
+          if (t.dirty) {
+            this.drawTriangle(t.points, t.color);
+            this.drawLabel([x - this.gridOffsetX, y - this.gridOffsetY].join(','), t.points);
+            t.dirty = false;
+          }
         }
       }
-
-      this.drawCenter();
     }
 
     drawCenter() {
@@ -57,20 +69,20 @@
       this.ctx.stroke();
     }
 
-    randomTriangle() {
-      return [rand(this.columns), rand(this.rows)];
-    }
-
-    drawTriangle(points) {
+    drawTriangle(points, color) {
       this.ctx.beginPath();
       this.ctx.moveTo(points[0], points[1]);
       this.ctx.lineTo(points[2], points[3]);
       this.ctx.lineTo(points[4], points[5]);
       this.ctx.closePath();
-      this.ctx.strokeStyle = 'black';
-      this.ctx.lineWidth = 4;
-      this.ctx.fillStyle = 'hsl(' + Math.floor(Math.random() * 360) + ', 40%, 80%)';
+      this.ctx.fillStyle = color;
       this.ctx.fill();
+    }
+
+    drawLabel(t, points) {
+      this.ctx.fillStyle = 'black';
+      this.ctx.font = '8px monospace';
+      this.ctx.fillText(t, (points[0] + points[2] + points[4]) / 3 - 4 * t.length, (points[1] + points[3] + points[5]) / 3);
     }
 
     createTriangle(x, y) {
@@ -91,9 +103,9 @@
     offsetPoints(points) {
       for (var i = 0; i < points.length; i++) {
         if (i % 2) {
-          points[i] -= this.yOffset;
+          points[i] = (points[i] + this.yOffset | 0);
         } else {
-          points[i] -= this.xOffset;
+          points[i] = (points[i] + this.xOffset | 0);
         }
       }
     }
@@ -114,6 +126,9 @@
     }
 
     coordinatedToPoints(tx, ty) {
+      tx -= this.gridOffsetX;
+      ty -= this.gridOffsetY;
+
       var y = (ty - 1) * this.triangleSide / 2;
       var x = tx * this.columnWidth;
       if ((tx + ty) % 2) {
